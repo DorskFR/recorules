@@ -1,6 +1,11 @@
 # RecoRules
 
 A TUI planning tool for Recoru time tracking, adapted to your workplace rules.
+Coded by Claude Code 🤖
+
+## UI
+
+![Screenshot](recorules.png)
 
 ## Features
 
