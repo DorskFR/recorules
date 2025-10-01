@@ -159,10 +159,8 @@ class RecoRulesApp(App):
             self.day_records, self.planned_days, self.current_year, self.current_month, self.today
         )
 
-        # Calculate stats (keeps actual vs planned separate for display)
-        stats = calculate_month_stats(
-            self.current_year, self.current_month, self.day_records, self.planned_days
-        )
+        # Calculate stats from merged records (single source of truth)
+        stats = calculate_month_stats(self.current_year, self.current_month, merged_records)
 
         # Update UI on main thread
         self.call_from_thread(self._update_ui, stats, merged_records)

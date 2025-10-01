@@ -135,57 +135,47 @@ def _calculate_entry_duration(
 def calculate_month_stats(
     year: int,
     month: int,
-    day_records: list[DayRecord],
-    planned_days: list[PlannedDay] | None = None,
+    merged_records: list[DayRecord],
 ) -> MonthStats:
     """
-    Calculate monthly statistics based on workplace rules.
+    Calculate monthly statistics from merged records (actual + planned + auto-defaults).
+
+    Single source of truth for ALL calculations.
 
     Rules:
     - 8 hours per working day required
     - 1 hour WFH quota per working day
     - Mandatory in-office = total required - WFH quota
+    - Paid leave reduces required hours (not a working day)
+    - Unpaid leave is a working day (hours still due)
+    - WFH quota is based on total working days (not reduced by paid leave)
     """
-    planned_days = planned_days or []
-
-    # Count working days from actual records (includes company holidays, not just jpholiday)
+    # Count working days and paid leave from ALL records
     working_days = 0
     paid_leave_days = 0
-    actual_office_minutes = 0
-    actual_wfh_minutes = 0
+    total_office_minutes = 0
+    total_wfh_minutes = 0
 
-    for record in day_records:
+    for record in merged_records:
         # Count working days (including unpaid leave which still requires hours)
         if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE):
             working_days += 1
         elif record.day_type == DayType.PAID_LEAVE:
             paid_leave_days += 1
 
-        # Aggregate hours
-        actual_office_minutes += record.office_minutes
-        actual_wfh_minutes += record.remote_minutes
+        # Aggregate hours (office_minutes and remote_minutes already exclude leave entries)
+        total_office_minutes += record.office_minutes
+        total_wfh_minutes += record.remote_minutes
 
-    # Aggregate planned hours
-    planned_office_minutes = sum(p.office_minutes for p in planned_days)
-    planned_wfh_minutes = sum(p.remote_minutes for p in planned_days)
-    paid_leave_days += sum(1 for p in planned_days if p.is_paid_leave)
-
-    # Calculate requirements (subtract paid leave days since they don't require work)
-    actual_working_days = working_days - paid_leave_days
+    # Calculate requirements
+    actual_working_days = working_days - paid_leave_days  # Paid leave reduces work requirement
     total_required_hours = actual_working_days * HOURS_PER_DAY
-    # WFH quota is based on total working days, not reduced by paid leave
-    wfh_quota_hours = working_days * WFH_QUOTA_PER_DAY
+    wfh_quota_hours = working_days * WFH_QUOTA_PER_DAY  # Quota based on total working days
     office_required_hours = total_required_hours - wfh_quota_hours
 
-    # Calculate balance (exclude paid leave from worked minutes)
-    total_worked_minutes = sum(
-        record.total_minutes for record in day_records if record.day_type != DayType.PAID_LEAVE
-    )
-    total_planned_minutes = sum(
-        p.office_minutes + p.remote_minutes for p in planned_days if not p.is_paid_leave
-    )
-    total_minutes = total_worked_minutes + total_planned_minutes
-    balance_minutes = total_minutes - (actual_working_days * HOURS_PER_DAY * 60)
+    # Calculate balance (total worked - total required)
+    total_worked_minutes = total_office_minutes + total_wfh_minutes
+    balance_minutes = total_worked_minutes - (actual_working_days * HOURS_PER_DAY * 60)
 
     return MonthStats(
         year=year,
@@ -194,10 +184,10 @@ def calculate_month_stats(
         total_required_hours=total_required_hours,
         wfh_quota_hours=wfh_quota_hours,
         office_required_hours=office_required_hours,
-        actual_office_hours=actual_office_minutes / 60,
-        actual_wfh_hours=actual_wfh_minutes / 60,
-        planned_office_hours=planned_office_minutes / 60,
-        planned_wfh_hours=planned_wfh_minutes / 60,
+        actual_office_hours=total_office_minutes / 60,  # Now represents TOTAL (not just actual)
+        actual_wfh_hours=total_wfh_minutes / 60,  # Now represents TOTAL (not just actual)
+        planned_office_hours=0,  # Deprecated: keeping for compatibility
+        planned_wfh_hours=0,  # Deprecated: keeping for compatibility
         paid_leave_days=paid_leave_days,
         balance_minutes=balance_minutes,
     )
