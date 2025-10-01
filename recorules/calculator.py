@@ -157,10 +157,12 @@ def calculate_month_stats(
     total_wfh_minutes = 0
 
     for record in merged_records:
-        # Count working days (including unpaid leave which still requires hours)
-        if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE):
+        # Count working days (all days that would be work days in the calendar)
+        if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE, DayType.PAID_LEAVE):
             working_days += 1
-        elif record.day_type == DayType.PAID_LEAVE:
+
+        # Count paid leave separately (to reduce requirements)
+        if record.day_type == DayType.PAID_LEAVE:
             paid_leave_days += 1
 
         # Aggregate hours (office_minutes and remote_minutes already exclude leave entries)
@@ -173,9 +175,11 @@ def calculate_month_stats(
     wfh_quota_hours = working_days * WFH_QUOTA_PER_DAY  # Quota based on total working days
     office_required_hours = total_required_hours - wfh_quota_hours
 
-    # Calculate balance (total worked - total required)
-    total_worked_minutes = total_office_minutes + total_wfh_minutes
-    balance_minutes = total_worked_minutes - (actual_working_days * HOURS_PER_DAY * 60)
+    # Calculate balance using capped WFH (respects quota)
+    # This is the "compliance balance" - what matters for workplace rules
+    capped_wfh_minutes = min(total_wfh_minutes, wfh_quota_hours * 60)
+    capped_total_worked = total_office_minutes + capped_wfh_minutes
+    balance_minutes = capped_total_worked - (actual_working_days * HOURS_PER_DAY * 60)
 
     return MonthStats(
         year=year,
@@ -251,10 +255,70 @@ def merge_actual_and_planned(
     for day_record in full_calendar:
         target_date = day_record.date
 
-        # If we have actual data, use it
-        if target_date in actual_by_date:
+        # For past/today: always use actual data if available
+        if target_date <= today and target_date in actual_by_date:
             result.append(actual_by_date[target_date])
-        # If we have planned data, convert to DayRecord
+        # For future: use actual only if it has meaningful data (entries or special day type)
+        elif target_date in actual_by_date:
+            actual = actual_by_date[target_date]
+            # Check if entries have meaningful duration (> 0)
+            has_meaningful_entries = any(entry.duration.minutes > 0 for entry in actual.entries)
+            # Use if has meaningful entries OR is special day (leave/holiday/weekend)
+            if has_meaningful_entries or actual.day_type != DayType.WORKING_DAY:
+                result.append(actual)
+            # Empty future working day: check for plans or auto-generate
+            elif target_date in planned_by_date:
+                planned = planned_by_date[target_date]
+                day_type = DayType.PAID_LEAVE if planned.is_paid_leave else day_record.day_type
+
+                # Create entries for planned office/wfh time
+                entries = []
+                if planned.office_minutes > 0:
+                    entries.append(
+                        WorkEntry(
+                            workplace=WorkplaceType.OFFICE,
+                            clock_in=None,
+                            clock_out=None,
+                            duration=Duration(planned.office_minutes),
+                            category="Planned",
+                        )
+                    )
+                if planned.remote_minutes > 0:
+                    entries.append(
+                        WorkEntry(
+                            workplace=WorkplaceType.WFH,
+                            clock_in=None,
+                            clock_out=None,
+                            duration=Duration(planned.remote_minutes),
+                            category="Planned",
+                        )
+                    )
+
+                result.append(
+                    DayRecord(
+                        date=target_date, day_type=day_type, entries=entries, memo=planned.note
+                    )
+                )
+            # No plan: auto-generate default for working days
+            elif day_record.day_type == DayType.WORKING_DAY:
+                entries = [
+                    WorkEntry(
+                        workplace=WorkplaceType.OFFICE,
+                        clock_in=None,
+                        clock_out=None,
+                        duration=Duration(480),
+                        category="Planned",
+                    )
+                ]
+                result.append(
+                    DayRecord(
+                        date=target_date, day_type=day_record.day_type, entries=entries, memo=""
+                    )
+                )
+            else:
+                # Weekend/holiday with no data
+                result.append(actual)
+        # No actual data: check for planned data
         elif target_date in planned_by_date:
             planned = planned_by_date[target_date]
             day_type = DayType.PAID_LEAVE if planned.is_paid_leave else day_record.day_type
