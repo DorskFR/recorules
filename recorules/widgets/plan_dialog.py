@@ -71,11 +71,11 @@ class PlanDialog(ModalScreen):
 
             with Grid(classes="input-row"):
                 yield Label("Office hours:", classes="input-label")
-                yield Input(placeholder="0", id="office-hours")
+                yield Input(placeholder="8 or 8:30", id="office-hours")
 
             with Grid(classes="input-row"):
                 yield Label("WFH hours:", classes="input-label")
-                yield Input(placeholder="0", id="wfh-hours")
+                yield Input(placeholder="8 or 8:30", id="wfh-hours")
 
             with Grid(classes="input-row"):
                 yield Label("Note:", classes="input-label")
@@ -111,6 +111,25 @@ class PlanDialog(ModalScreen):
             button.label = "No"
             button.variant = "default"
 
+    def parse_hours(self, value: str) -> float:
+        """Parse hours from either HH:MM format or decimal (e.g., '8:30' or '8.5')."""
+        value = value.strip()
+        if not value or value == "0":
+            return 0.0
+
+        # Check for HH:MM format
+        if ":" in value:
+            parts = value.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"Invalid time format: {value}")
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            if minutes < 0 or minutes >= 60:
+                raise ValueError(f"Minutes must be 0-59: {value}")
+            return hours + (minutes / 60.0)
+        # Decimal format
+        return float(value)
+
     def save_plan(self) -> None:
         """Save the plan and dismiss the dialog."""
         office_input = self.query_one("#office-hours", Input)
@@ -119,10 +138,12 @@ class PlanDialog(ModalScreen):
         paid_leave_button = self.query_one("#paid-leave-toggle", Button)
 
         try:
-            office_hours = float(office_input.value or "0")
-            wfh_hours = float(wfh_input.value or "0")
-        except ValueError:
-            self.notify("Invalid hours format", severity="error")
+            office_hours = self.parse_hours(office_input.value or "0")
+            wfh_hours = self.parse_hours(wfh_input.value or "0")
+        except ValueError as e:
+            self.notify(
+                f"Invalid format: {e}. Use HH:MM or decimal (e.g., 8:30 or 8.5)", severity="error"
+            )
             return
 
         if office_hours < 0 or wfh_hours < 0:
