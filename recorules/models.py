@@ -109,7 +109,8 @@ class MonthStats:
     planned_office_hours: float
     planned_wfh_hours: float
     paid_leave_days: int
-    balance_minutes: int
+    balance_minutes: int  # Deprecated: kept for table display
+    suggested_clockout_time: str | None = None  # e.g., "17:30" or "Done ✓"
 
     @property
     def total_office_hours(self) -> float:

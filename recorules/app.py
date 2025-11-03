@@ -159,13 +159,17 @@ class RecoRulesApp(App):
             self.day_records, self.planned_days, self.current_year, self.current_month, self.today
         )
 
-        # Calculate stats from merged records (single source of truth)
-        stats = calculate_month_stats(self.current_year, self.current_month, merged_records)
+        # Calculate stats and daily balances (single source of truth)
+        stats, daily_balances = calculate_month_stats(
+            self.current_year, self.current_month, merged_records, self.today
+        )
 
         # Update UI on main thread
-        self.call_from_thread(self._update_ui, stats, merged_records)
+        self.call_from_thread(self._update_ui, stats, merged_records, daily_balances)
 
-    def _update_ui(self, stats: MonthStats, merged_records: list[DayRecord]) -> None:
+    def _update_ui(
+        self, stats: MonthStats, merged_records: list[DayRecord], daily_balances: dict
+    ) -> None:
         """Update UI components (must run on main thread)."""
         # Update stats panel
         stats_panel = self.query_one("#stats-panel", StatsPanel)
@@ -173,7 +177,7 @@ class RecoRulesApp(App):
 
         # Update calendar table
         calendar_table = self.query_one("#calendar-table", CalendarTable)
-        calendar_table.load_records(merged_records, self.today)
+        calendar_table.load_records(merged_records, daily_balances, self.today)
 
         # Hide loading indicator
         loading = self.query_one("#loading-indicator", LoadingIndicator)

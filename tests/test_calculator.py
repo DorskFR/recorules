@@ -45,7 +45,7 @@ def test_calculate_month_stats_basic():
             DayRecord(date=target_date, day_type=DayType.WORKING_DAY, entries=[entry], memo="")
         )
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # September 2025 should have ~22 working days (need to verify)
     assert stats.working_days > 0
@@ -109,7 +109,7 @@ def test_calculate_month_stats_with_wfh():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Check office and WFH hours
     assert stats.actual_office_hours == pytest.approx((607 + 488) / 60, rel=0.01)
@@ -149,7 +149,7 @@ def test_calculate_month_stats_with_planned():
     merged_records = merge_actual_and_planned(actual_records, planned, 2025, 9, today)
 
     # Calculate stats from merged records
-    stats = calculate_month_stats(2025, 9, merged_records)
+    stats, _ = calculate_month_stats(2025, 9, merged_records)
 
     # Verify Sept 1 (actual) is present
     sept1 = next(r for r in merged_records if r.date == date(2025, 9, 1))
@@ -190,7 +190,7 @@ def test_calculate_month_stats_paid_leave():
         )
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     assert stats.paid_leave_days == 1
 
@@ -199,7 +199,7 @@ def test_wfh_over_quota():
     """Test calculation of WFH over quota."""
     # If working days = 20, quota = 20 hours
     # If we do 30 hours WFH, we're 10 hours over
-    stats = calculate_month_stats(
+    stats, _ = calculate_month_stats(
         2025,
         9,
         [
@@ -244,7 +244,7 @@ def test_office_deficit():
         )
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Office deficit should be positive if under required
     if stats.office_required_hours > 100:

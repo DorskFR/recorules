@@ -136,7 +136,8 @@ def calculate_month_stats(
     year: int,
     month: int,
     merged_records: list[DayRecord],
-) -> MonthStats:
+    today: date | None = None,
+) -> tuple[MonthStats, dict[date, int]]:
     """
     Calculate monthly statistics from merged records (actual + planned + auto-defaults).
 
@@ -149,14 +150,40 @@ def calculate_month_stats(
     - Paid leave reduces required hours (not a working day)
     - Unpaid leave is a working day (hours still due)
     - WFH quota is based on total working days (not reduced by paid leave)
+
+    Args:
+        today: If provided, balance will be calculated only for past/today records
     """
-    # Count working days and paid leave from ALL records
+    from datetime import datetime, timedelta
+
+    if today is None:
+        today = datetime.now(JST).date()
+
+    # Count working days and paid leave from ALL records (for month-end projections)
     working_days = 0
     paid_leave_days = 0
     total_office_minutes = 0
     total_wfh_minutes = 0
 
+    # Track daily balances (cumulative, WITH WFH capping)
+    daily_balances: dict[date, int] = {}
+    running_balance_minutes = 0
+
+    # Today's balance specifically
+    current_balance_minutes = 0
+
+    # Track WFH quota consumption chronologically
+    # We need to count working days first to know total quota
+    total_wfh_quota_minutes = 0
     for record in merged_records:
+        if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE, DayType.PAID_LEAVE):
+            total_wfh_quota_minutes += WFH_QUOTA_PER_DAY * 60
+
+    remaining_wfh_quota_minutes = total_wfh_quota_minutes
+
+    for record in merged_records:
+        is_past_or_today = record.date <= today
+
         # Count working days (all days that would be work days in the calendar)
         if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE, DayType.PAID_LEAVE):
             working_days += 1
@@ -165,36 +192,97 @@ def calculate_month_stats(
         if record.day_type == DayType.PAID_LEAVE:
             paid_leave_days += 1
 
-        # Aggregate hours (office_minutes and remote_minutes already exclude leave entries)
+        # Aggregate hours (uncapped, for display purposes)
         total_office_minutes += record.office_minutes
         total_wfh_minutes += record.remote_minutes
 
+        # Calculate daily balance with WFH capping
+        # Only count WFH up to remaining quota
+        capped_wfh_minutes = min(record.remote_minutes, remaining_wfh_quota_minutes)
+        remaining_wfh_quota_minutes = max(0, remaining_wfh_quota_minutes - record.remote_minutes)
+
+        worked_minutes = record.office_minutes + capped_wfh_minutes
+        expected_minutes = record.expected_minutes
+        daily_balance = worked_minutes - expected_minutes
+        running_balance_minutes += daily_balance
+
+        # Store cumulative balance for this day
+        daily_balances[record.date] = running_balance_minutes
+
+        if is_past_or_today:
+            current_balance_minutes = running_balance_minutes
+
     # Calculate requirements
-    actual_working_days = working_days - paid_leave_days  # Paid leave reduces work requirement
+    actual_working_days = working_days - paid_leave_days
     total_required_hours = actual_working_days * HOURS_PER_DAY
-    wfh_quota_hours = working_days * WFH_QUOTA_PER_DAY  # Quota based on total working days
+    wfh_quota_hours = working_days * WFH_QUOTA_PER_DAY
     office_required_hours = total_required_hours - wfh_quota_hours
 
-    # Calculate balance using capped WFH (respects quota)
-    # This is the "compliance balance" - what matters for workplace rules
-    capped_wfh_minutes = min(total_wfh_minutes, wfh_quota_hours * 60)
-    capped_total_worked = total_office_minutes + capped_wfh_minutes
-    balance_minutes = capped_total_worked - (actual_working_days * HOURS_PER_DAY * 60)
+    # Calculate suggested clock-out time for today
+    suggested_clockout_time = None
+    today_record = next((r for r in merged_records if r.date == today), None)
 
-    return MonthStats(
+    if today_record and today_record.day_type == DayType.WORKING_DAY:
+        # Get yesterday's balance (already capped)
+        from datetime import timedelta
+
+        yesterday = today - timedelta(days=1)
+        yesterday_balance = daily_balances.get(yesterday, 0)
+
+        # Minutes needed today to reach neutral balance
+        # yesterday_balance + (today_worked - today_required) = 0
+        # today_worked = today_required - yesterday_balance
+        today_required = HOURS_PER_DAY * 60  # 480 minutes
+        minutes_needed_today = today_required - yesterday_balance
+
+        # Calculate how much WFH quota was available for today
+        # Recalculate remaining quota up to yesterday
+        remaining_quota_before_today = total_wfh_quota_minutes
+        for record in merged_records:
+            if record.date >= today:
+                break
+            remaining_quota_before_today = max(
+                0, remaining_quota_before_today - record.remote_minutes
+            )
+
+        # How much worked today so far (with WFH capping)
+        capped_today_wfh = min(today_record.remote_minutes, remaining_quota_before_today)
+        today_worked = today_record.office_minutes + capped_today_wfh
+
+        # Remaining minutes to reach neutral
+        remaining_minutes = minutes_needed_today - today_worked
+
+        if remaining_minutes <= 0:
+            suggested_clockout_time = "Done ✓"
+        else:
+            # Calculate clock-out time
+            from datetime import datetime
+
+            current_time = datetime.now(JST)
+
+            # The remaining work time is net work time (breaks already handled)
+            # Simply add the remaining minutes to current time
+            clockout_time = current_time + timedelta(minutes=remaining_minutes)
+
+            suggested_clockout_time = clockout_time.strftime("%H:%M")
+
+    stats = MonthStats(
         year=year,
         month=month,
         working_days=working_days,
         total_required_hours=total_required_hours,
         wfh_quota_hours=wfh_quota_hours,
         office_required_hours=office_required_hours,
-        actual_office_hours=total_office_minutes / 60,  # Now represents TOTAL (not just actual)
-        actual_wfh_hours=total_wfh_minutes / 60,  # Now represents TOTAL (not just actual)
-        planned_office_hours=0,  # Deprecated: keeping for compatibility
-        planned_wfh_hours=0,  # Deprecated: keeping for compatibility
+        actual_office_hours=total_office_minutes / 60,
+        actual_wfh_hours=total_wfh_minutes / 60,
+        planned_office_hours=0,  # Deprecated
+        planned_wfh_hours=0,  # Deprecated
         paid_leave_days=paid_leave_days,
-        balance_minutes=balance_minutes,
+        balance_minutes=current_balance_minutes,
+        suggested_clockout_time=suggested_clockout_time,
     )
+
+    return stats, daily_balances
 
 
 def generate_month_calendar(year: int, month: int) -> list[DayRecord]:

@@ -33,7 +33,7 @@ class StatsPanel(Container):
 
         # Format hours as HH:MM for readability
         def fmt_hours(hours: float) -> str:
-            total_minutes = int(hours * 60)
+            total_minutes = round(hours * 60)
             h = total_minutes // 60
             m = total_minutes % 60
             return f"{h}h {m:02d}m"
@@ -49,11 +49,18 @@ class StatsPanel(Container):
         self.query_one("#stat-required", Static).update(
             f"[bold]Required:[/bold] {fmt_hours(stats.total_required_hours)}"
         )
-        balance_hours = stats.balance_minutes / 60
-        balance_sign = "+" if balance_hours >= 0 else ""
-        self.query_one("#stat-balance", Static).update(
-            f"[bold]Balance:[/bold] {balance_sign}{fmt_hours(balance_hours)}"
-        )
+        # Show suggested clock-out time (actionable info)
+        if stats.suggested_clockout_time:
+            if stats.suggested_clockout_time == "Done ✓":
+                self.query_one("#stat-balance", Static).update(
+                    f"[bold green]Clock out:[/bold green] {stats.suggested_clockout_time}"
+                )
+            else:
+                self.query_one("#stat-balance", Static).update(
+                    f"[bold]Clock out:[/bold] {stats.suggested_clockout_time}"
+                )
+        else:
+            self.query_one("#stat-balance", Static).update("[bold]Clock out:[/bold] --")
 
         self.query_one("#stat-wfh-used", Static).update(
             f"[bold]WFH Used:[/bold] {fmt_hours(stats.total_wfh_hours)} {wfh_status}"

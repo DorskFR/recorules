@@ -41,7 +41,7 @@ def test_paid_leave_reduces_requirements():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Working days = 2 (both count as working days in calendar)
     assert stats.working_days == 2
@@ -88,7 +88,7 @@ def test_unpaid_leave_still_required():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Working days = 2 (unpaid leave counts as working day)
     assert stats.working_days == 2
@@ -141,7 +141,7 @@ def test_wfh_quota_not_reduced_by_leave():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Working days = 20
     assert stats.working_days == 20
@@ -154,11 +154,11 @@ def test_wfh_quota_not_reduced_by_leave():
 
 
 def test_wfh_over_quota_capped_in_balance():
-    """Balance calculation should cap WFH at quota when over."""
+    """Balance and total_deficit both cap WFH at quota."""
     # Realistic: 20 working days, need 160h
     # Work exactly 160h: 136h office (17 days) + 24h WFH (3 days)
     # WFH quota: 20h (only 2.5 days allowed)
-    # Balance (capped): (136 + 20) - 160 = -4h deficit
+    # Both balance and deficit show shortage due to WFH cap (only 20h of the 24h WFH counts)
     records = [
         # 17 days office (136h)
         *[
@@ -198,7 +198,7 @@ def test_wfh_over_quota_capped_in_balance():
         ],
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Working days = 20
     assert stats.working_days == 20
@@ -212,8 +212,10 @@ def test_wfh_over_quota_capped_in_balance():
     assert stats.wfh_quota_hours == 20.0
     # WFH over quota = 24 - 20 = 4h
     assert stats.wfh_over_quota == 4.0
-    # Balance (capped): (136 + 20 capped) - 160 = -4h = -240min
+    # Balance (capped): worked (136h + 20h capped WFH) - required (160h) = -4h = -240min
     assert stats.balance_minutes == -240
+    # total_deficit (capped) also shows: (136 + 20 capped) - 160 = -4h
+    assert stats.total_deficit == 4.0
 
 
 def test_weekend_not_counted_as_working_day():
@@ -233,7 +235,7 @@ def test_weekend_not_counted_as_working_day():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 10, records)
+    stats, _ = calculate_month_stats(2025, 10, records)
 
     assert stats.working_days == 0
     assert stats.total_required_hours == 0.0
@@ -259,7 +261,7 @@ def test_balance_calculation():
         )
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Working days = 1, required = 8h, worked = 10h
     # Balance = 10h - 8h = 2h = 120min
@@ -299,7 +301,7 @@ def test_leave_entries_filtered_from_worked_time():
         ),
     ]
 
-    stats = calculate_month_stats(2025, 9, records)
+    stats, _ = calculate_month_stats(2025, 9, records)
 
     # Only the first day's 8h should count
     assert stats.actual_office_hours == 8.0
@@ -327,7 +329,7 @@ def test_planned_entries_counted():
         )
     ]
 
-    stats = calculate_month_stats(2025, 10, records)
+    stats, _ = calculate_month_stats(2025, 10, records)
 
     # Planned entries should count as worked time
     assert stats.actual_office_hours == 8.0

@@ -31,21 +31,22 @@ class CalendarTable(DataTable):
         self.add_column("Balance", width=10)
         self.add_column("Note")  # No width = auto-size to remaining space
 
-    def load_records(self, records: list[DayRecord], today: date_type | None = None) -> None:
+    def load_records(
+        self,
+        records: list[DayRecord],
+        daily_balances: dict[date_type, int],
+        today: date_type | None = None,
+    ) -> None:
         """Load day records into the table."""
         self.clear()
         if today is None:
             today = datetime.now(JST).date()
 
-        running_balance = 0
         today_row_index = None
 
         for idx, record in enumerate(records):
-            # Calculate balance (use office + remote to exclude leave entries)
-            worked_minutes = record.office_minutes + record.remote_minutes
-            expected_minutes = record.expected_minutes
-            daily_balance = worked_minutes - expected_minutes
-            running_balance += daily_balance
+            # Get balance from pre-calculated dict (single source of truth)
+            balance_minutes = daily_balances.get(record.date, 0)
 
             # Format values
             date_str = record.date.strftime("%m/%d")
@@ -54,8 +55,8 @@ class CalendarTable(DataTable):
 
             office_str = self._format_minutes(record.office_minutes)
             remote_str = self._format_minutes(record.remote_minutes)
-            expected_str = self._format_minutes(expected_minutes)
-            balance_str = self._format_balance(running_balance)
+            expected_str = self._format_minutes(record.expected_minutes)
+            balance_str = self._format_balance(balance_minutes)
 
             # Collect notes
             note = record.memo if record.memo else ""
