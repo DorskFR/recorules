@@ -105,6 +105,8 @@ class RecoRulesApp(App):
         """Load data when the app starts."""
         self.title = f"RecoRules - {self.current_year}/{self.current_month:02d}"
         self.load_data_async()
+        # Auto-refresh every 10 minutes (600 seconds)
+        self.set_interval(600, self.auto_refresh)
 
     def load_data_async(self) -> None:
         """Start async data loading."""
@@ -191,6 +193,11 @@ class RecoRulesApp(App):
     def action_refresh(self) -> None:
         """Refresh data from Recoru."""
         self.notify("Refreshing data...", severity="information")
+        self.load_data_async()
+
+    def auto_refresh(self) -> None:
+        """Auto-refresh data periodically."""
+        self.notify("Auto-refreshing data...", severity="information", timeout=2)
         self.load_data_async()
 
     def action_next_month(self) -> None:
