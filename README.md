@@ -25,7 +25,7 @@ make setup
 
 ```bash
 make run
-# Or: rye run python -m recorules
+# Or: uv run python -m recorules
 ```
 
 On first run, you'll be prompted to configure your Recoru credentials:

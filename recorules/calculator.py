@@ -37,7 +37,10 @@ def parse_attendance_chart(
         # Unpaid leave: hours still due
         elif any("unpaid" in entry.category.lower() for entry in row.entries):
             day_type = DayType.UNPAID_LEAVE
-        elif any("leave" in entry.category.lower() for entry in row.entries):
+        elif any(
+            "leave" in entry.category.lower() or "holiday" in entry.category.lower()
+            for entry in row.entries
+        ):
             day_type = DayType.PAID_LEAVE
         elif is_working_day(target_date):
             day_type = DayType.WORKING_DAY

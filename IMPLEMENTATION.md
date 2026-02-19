@@ -147,7 +147,7 @@ Database stored at: `~/.config/recorules/planning.db`
 
 To reconfigure:
 ```bash
-rye run python -m recorules config
+uv run python -m recorules config
 ```
 
 ## Comparison with Excel Sheet

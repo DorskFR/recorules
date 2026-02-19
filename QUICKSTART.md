@@ -134,11 +134,11 @@ Press **`q`** to quit.
 ## Troubleshooting
 
 ### "No configuration found"
-Run: `rye run python -m recorules config`
+Run: `uv run python -m recorules config`
 
 ### "Failed to fetch data from Recoru"
 - Check your internet connection
-- Verify credentials: `rye run python -m recorules config`
+- Verify credentials: `uv run python -m recorules config`
 - Make sure you can log into Recoru website
 
 ### Stats seem wrong
@@ -155,7 +155,7 @@ Run: `rye run python -m recorules config`
 
 ### Reconfigure
 ```bash
-rye run python -m recorules config
+uv run python -m recorules config
 ```
 
 ### Run tests

@@ -1,6 +1,6 @@
 APP ?= recorules
 TESTS ?= ./tests
-PYTHON ?= rye run python
+PYTHON ?= uv run python
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} \;
@@ -23,7 +23,7 @@ run:
 	$(PYTHON) -m $(APP)
 
 setup:
-	rye sync
+	uv sync
 
 test:
 	$(PYTHON) -m pytest --rootdir=. -o cache_dir=.cache/pytest_cache $(TESTS) -s -x -v $(options)
