@@ -38,6 +38,10 @@ def parse_attendance_chart(
         elif any("unpaid" in entry.category.lower() for entry in row.entries):
             day_type = DayType.UNPAID_LEAVE
         elif any(
+            _is_half_day_leave_category(entry.category) for entry in row.entries
+        ):
+            day_type = DayType.HALF_DAY_PAID_LEAVE
+        elif any(
             "leave" in entry.category.lower() or "holiday" in entry.category.lower()
             for entry in row.entries
         ):
@@ -72,6 +76,18 @@ def parse_attendance_chart(
     return records
 
 
+_HALF_DAY_LEAVE_CATEGORIES = (
+    "Half Day Leave AM",
+    "Half Day Leave PM",
+    "Flexible Holiday AM",
+    "Flexible Holiday PM",
+)
+
+
+def _is_half_day_leave_category(category: str) -> bool:
+    return any(half_day in category for half_day in _HALF_DAY_LEAVE_CATEGORIES)
+
+
 def _parse_workplace(workplace_str: str) -> WorkplaceType:
     """Parse workplace string into WorkplaceType, defaulting to OFFICE."""
     if "WFH" in workplace_str or "remote" in workplace_str.lower():
@@ -87,15 +103,7 @@ def _calculate_entry_duration(
     category = entry.category
 
     # Handle half-day leave categories (4 hours)
-    if any(
-        half_day in category
-        for half_day in [
-            "Half Day Leave AM",
-            "Half Day Leave PM",
-            "Flexible Holiday AM",
-            "Flexible Holiday PM",
-        ]
-    ):
+    if _is_half_day_leave_category(category):
         return Duration(4 * 60)
 
     # Handle full-day leave categories (8 hours)
@@ -164,7 +172,7 @@ def calculate_month_stats(
 
     # Count working days and paid leave from ALL records (for month-end projections)
     working_days = 0
-    paid_leave_days = 0
+    paid_leave_days: float = 0
     total_office_minutes = 0
     total_wfh_minutes = 0
 
@@ -179,7 +187,12 @@ def calculate_month_stats(
     # We need to count working days first to know total quota
     total_wfh_quota_minutes = 0
     for record in merged_records:
-        if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE, DayType.PAID_LEAVE):
+        if record.day_type in (
+            DayType.WORKING_DAY,
+            DayType.UNPAID_LEAVE,
+            DayType.PAID_LEAVE,
+            DayType.HALF_DAY_PAID_LEAVE,
+        ):
             total_wfh_quota_minutes += WFH_QUOTA_PER_DAY * 60
 
     remaining_wfh_quota_minutes = total_wfh_quota_minutes
@@ -188,12 +201,19 @@ def calculate_month_stats(
         is_past_or_today = record.date <= today
 
         # Count working days (all days that would be work days in the calendar)
-        if record.day_type in (DayType.WORKING_DAY, DayType.UNPAID_LEAVE, DayType.PAID_LEAVE):
+        if record.day_type in (
+            DayType.WORKING_DAY,
+            DayType.UNPAID_LEAVE,
+            DayType.PAID_LEAVE,
+            DayType.HALF_DAY_PAID_LEAVE,
+        ):
             working_days += 1
 
         # Count paid leave separately (to reduce requirements)
         if record.day_type == DayType.PAID_LEAVE:
             paid_leave_days += 1
+        elif record.day_type == DayType.HALF_DAY_PAID_LEAVE:
+            paid_leave_days += 0.5
 
         # Aggregate hours (uncapped, for display purposes)
         total_office_minutes += record.office_minutes

@@ -21,6 +21,7 @@ class DayType(str, Enum):
     WEEKEND = "weekend"
     HOLIDAY = "holiday"
     PAID_LEAVE = "paid_leave"
+    HALF_DAY_PAID_LEAVE = "half_day_paid_leave"
     UNPAID_LEAVE = "unpaid_leave"
 
 
@@ -80,6 +81,8 @@ class DayRecord:
             return 8 * 60  # Unpaid leave: hours still due
         if self.day_type == DayType.PAID_LEAVE:
             return 0  # Paid leave: no hours due
+        if self.day_type == DayType.HALF_DAY_PAID_LEAVE:
+            return 4 * 60  # Half-day paid leave: 4 hours still due
         return 0  # Weekend/holiday
 
 
@@ -108,7 +111,7 @@ class MonthStats:
     actual_wfh_hours: float
     planned_office_hours: float
     planned_wfh_hours: float
-    paid_leave_days: int
+    paid_leave_days: float
     balance_minutes: int  # Deprecated: kept for table display
     suggested_clockout_time: str | None = None  # e.g., "17:30" or "Done ✓"
 
