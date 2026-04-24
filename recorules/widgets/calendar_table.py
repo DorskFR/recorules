@@ -62,6 +62,8 @@ class CalendarTable(DataTable):
             note = record.memo if record.memo else ""
             if record.day_type == DayType.PAID_LEAVE:
                 note = "PTO" if not note else f"PTO | {note}"
+            elif record.day_type == DayType.HALF_DAY_PAID_LEAVE:
+                note = "Half PTO" if not note else f"Half PTO | {note}"
             elif record.day_type == DayType.UNPAID_LEAVE:
                 note = "Unpaid Leave" if not note else f"Unpaid Leave | {note}"
 
@@ -75,7 +77,7 @@ class CalendarTable(DataTable):
                 style = "blue"
             elif record.day_type == DayType.HOLIDAY:
                 style = "red"
-            elif record.day_type == DayType.PAID_LEAVE:
+            elif record.day_type in (DayType.PAID_LEAVE, DayType.HALF_DAY_PAID_LEAVE):
                 style = "cyan"
             elif record.date > today:
                 # Dim future working days (with planned work)
